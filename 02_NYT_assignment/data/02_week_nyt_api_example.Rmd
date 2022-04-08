@@ -1,0 +1,63 @@
+---
+title: "02_week_nyt_api"
+author: "Steven Cognac"
+date: "4/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(jsonlite) #convert results from API queries into R-friendly formats 
+library(tidyverse) 
+library(tidytext) #text data management and analysis
+library(here)
+
+```
+
+# Connect to the New York Times API and send a query
+
+Example comes from [EDS 231 Topic 2: Text Data in R](https://maro406.github.io/EDS_231-text-sentiment/topic_2.html#connect-to-the-new-york-times-api-and-send-a-query)
+
+```{r}
+#create an object called t with the results of our query ("haaland")
+# the from JSON flatten the JSON object, then convert to a data frame
+
+# import to update the json query and update key to personal api key
+t <- fromJSON("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=USACE&api-key=GzI7RGgkaDjVAk5bgQ2pwGwDHMFS7fyz", flatten = TRUE) 
+#the string following "key=" is your API key 
+
+class(t) #what type of object is t?
+
+t <- t %>% 
+  data.frame()
+```
+```{r}
+#Inspect our data
+class(t) #now what is it?
+
+# 10 articles with 33 variables
+dim(t) # how big is it?
+
+names(t) # what variables are we working with?
+#t <- readRDS("nytDat.rds") #in case of API emergency :)
+```
+
+```{r}
+x <- t$response.docs.snippet[2]
+x
+```
+
+## Stringr manipulation
+```{r basic_stringr}
+tolower(x)
+str_split(x, ','); str_split(x, 't')
+str_replace(x, 'historic', 'without precedent')
+str_replace(x, ' ', '_') #first one
+#how do we replace all of them?
+str_replace_all(x, ' ', '_')
+
+str_detect(x, 't'); str_detect(x, 'tive') ### is pattern in the string? T/F
+str_locate(x, 't'); str_locate_all(x, 'as')
+```
+

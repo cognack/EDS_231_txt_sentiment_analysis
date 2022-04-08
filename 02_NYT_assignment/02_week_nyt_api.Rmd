@@ -1,0 +1,172 @@
+---
+title: "02_week_nyt_api"
+author: "Steven Cognac"
+date: "4/6/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(jsonlite) #convert results from API queries into R-friendly formats 
+library(tidyverse) 
+library(tidytext) #text data management and analysis
+library(here)
+
+```
+
+# Connect to the New York Times API and send a query
+
+```{r}
+term <- "wetlands" # Need to use + to string together separate words
+begin_date <- "20190120"
+end_date <- "20220401"
+
+#construct the query url using API operators
+baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",term,
+                  "&begin_date=",begin_date,"&end_date=",end_date,
+                  "&facet_filter=true&api-key=","GzI7RGgkaDjVAk5bgQ2pwGwDHMFS7fyz", sep="")
+
+#examine our query url
+baseurl
+```
+
+
+```{r}
+#this code allows for obtaining multiple pages of query results 
+initialQuery <- fromJSON(baseurl)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
+
+pages <- list()
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
+  message("Retrieving page ", i)
+  pages[[i+1]] <- nytSearch 
+  Sys.sleep(6) 
+}
+
+class(nytSearch)
+```
+
+# Bind pages & print to .csv
+```{r}
+# Bind pages to a single dataframe
+nyt_wetlands_dat <- rbind_pages(pages)
+
+class(nyt_wetlands_dat)
+
+# export dataframe as csv as backup
+# df <- apply(nyt_wetlands_dat,MARGIN = 2, FUN = as.character)
+# write.csv(df, "nyt_wetlands_dat.csv", row.names = TRUE)
+```
+
+# Graph Type of News Articles 
+```{r bar_graph}
+# switch to pages
+nyt_wetlands_dat %>% 
+  group_by(response.docs.type_of_material) %>%
+  summarize(count=n()) %>%
+  mutate(percent = (count / sum(count))*100) %>%
+  ggplot() +
+  geom_bar(aes(y=percent, x=response.docs.type_of_material, fill=response.docs.type_of_material), stat = "identity") + coord_flip() +
+  labs(title = "New York Times News Articles with the term 'Wetlands'",
+       subtitle = "January 2019 - April 2022",
+       caption = paste0("NYT stories in search criteria,  N=", nrow(nyt_wetlands_dat)))
+```
+
+```{r}
+# switch to pages
+nyt_wetlands_dat %>%
+  mutate(pubDay=gsub("T.*","",response.docs.pub_date)) %>%
+  group_by(pubDay) %>%
+  summarise(count=n()) %>%
+  filter(count >= 2) %>%
+  ggplot() +
+  geom_bar(aes(x=reorder(pubDay, count), y=count), stat="identity") + coord_flip()
+```
+
+
+```{r}
+names(nyt_wetlands_dat)
+```
+
+```{r frequency_table}
+#The 6th column, "response.doc.lead_paragraph", is the one we want here. 
+paragraph <- names(nyt_wetlands_dat)[6]  
+tokenized <- nyt_wetlands_dat %>%
+  unnest_tokens(word, paragraph)
+
+# lot's of fluff words that don't really help us tell meaning from the articles
+tokenized %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 10) %>% #illegible with all the words displayed
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+
+```
+
+
+# Let's grab some stop_words to remove fluff
+```{r}
+data(stop_words)
+
+# removes all the stop_words from the columns in the tokenized words
+tokenized <- tokenized %>%
+  anti_join(stop_words)
+
+tokenized %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 15) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(y = NULL)
+```
+
+```{r cleaning}
+#inspect the list of tokens (words)
+tokenized$word
+
+#Remove "change" from word bank
+clean_tokens <- str_remove_all(tokenized$word, "change")
+
+# replace climate with climate change
+clean_tokens <- str_replace_all(clean_tokens,"climate[a-z,A-Z]*","climate change") 
+
+#remove all numbers
+clean_tokens <- str_remove_all(clean_tokens, "[:digit:]") 
+
+# removes apostrophe s
+clean_tokens <- gsub("’s", '', clean_tokens)
+```
+
+```{r}
+tokenized$clean <- clean_tokens
+
+tokenized %>%
+  count(clean, sort = TRUE) %>%
+  filter(n > 15) %>% #illegible with all the words displayed
+  mutate(clean = reorder(clean, n)) %>%
+  ggplot(aes(n, clean)) +
+  geom_col() +
+  labs(y = NULL)
+
+#remove the empty strings
+tib <-subset(tokenized, clean!="")
+
+#reassign
+tokenized <- tib
+
+#try again
+tokenized %>%
+  count(clean, sort = TRUE) %>%
+  filter(n > 10) %>% #illegible with all the words displayed
+  mutate(clean = reorder(clean, n)) %>%
+  ggplot(aes(n, clean)) +
+  geom_col() +
+  labs(y = NULL)
+
+```
+
