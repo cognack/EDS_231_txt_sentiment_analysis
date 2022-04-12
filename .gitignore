@@ -37,3 +37,7 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+
+# nyt_api_key
+02_NYT_assignment/nyt_api_key.txt

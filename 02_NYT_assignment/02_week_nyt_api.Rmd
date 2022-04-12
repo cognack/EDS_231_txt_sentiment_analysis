@@ -12,161 +12,262 @@ library(jsonlite) #convert results from API queries into R-friendly formats
 library(tidyverse) 
 library(tidytext) #text data management and analysis
 library(here)
-
+library(patchwork)
 ```
 
-# Connect to the New York Times API and send a query
-
+# Build connection to the New York Times API
 ```{r}
-term <- "wetlands" # Need to use + to string together separate words
+term <- "wetland" # Need to use + to string together separate words
 begin_date <- "20190120"
 end_date <- "20220401"
+key <- read.delim(here("02_NYT_assignment/nyt_api_key.txt"), header = FALSE)
 
 #construct the query url using API operators
 baseurl <- paste0("http://api.nytimes.com/svc/search/v2/articlesearch.json?q=",term,
                   "&begin_date=",begin_date,"&end_date=",end_date,
-                  "&facet_filter=true&api-key=","GzI7RGgkaDjVAk5bgQ2pwGwDHMFS7fyz", sep="")
-
-#examine our query url
-baseurl
+                  "&facet_filter=true&api-key=",key, sep="")
 ```
 
-
+# Run search query on term "wetland" in the NYT api
+Because the NYT api only allows a max return of 10 results at a time, we have to uses the pages query to paginate through our results.
 ```{r}
 #this code allows for obtaining multiple pages of query results 
-initialQuery <- fromJSON(baseurl)
-maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
-
-pages <- list()
-for(i in 0:maxPages){
-  nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
-  message("Retrieving page ", i)
-  pages[[i+1]] <- nytSearch 
-  Sys.sleep(6) 
-}
-
-class(nytSearch)
+# initialQuery <- fromJSON(baseurl)
+# maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
+# 
+# pages <- list()
+# for(i in 0:maxPages){
+#   nytSearch <- fromJSON(paste0(baseurl, "&page=", i), flatten = TRUE) %>% data.frame() 
+#   message("Retrieving page ", i)
+#   pages[[i+1]] <- nytSearch 
+#   Sys.sleep(6) 
+# }
 ```
 
-# Bind pages & print to .csv
+We can now bind those pages together into single data frame
 ```{r}
-# Bind pages to a single dataframe
-nyt_wetlands_dat <- rbind_pages(pages)
+# nyt_wetland <- rbind_pages(pages)
+```
 
-class(nyt_wetlands_dat)
-
+# Write/Read .csv file
+To avoid having to redo the query each time, let's download our results and save as a .csv file
+```{r read_write_csv}
 # export dataframe as csv as backup
-# df <- apply(nyt_wetlands_dat,MARGIN = 2, FUN = as.character)
-# write.csv(df, "nyt_wetlands_dat.csv", row.names = TRUE)
+# df <- apply(nyt_wetland, MARGIN = 2, FUN = as.character)
+# write.csv(df, "data/nyt_wetland.csv", row.names = TRUE)
+
+# read in data so I don't have to re-download
+nyt_wetland <- read.csv(here("02_NYT_assignment/data/nyt_wetland.csv"), header = TRUE)
+
+# we received 380 articles from our search with 34 columns
+dim(nyt_wetland)
+
+# names of columns
+names(nyt_wetland)
 ```
 
-# Graph Type of News Articles 
-```{r bar_graph}
-# switch to pages
-nyt_wetlands_dat %>% 
-  group_by(response.docs.type_of_material) %>%
-  summarize(count=n()) %>%
-  mutate(percent = (count / sum(count))*100) %>%
-  ggplot() +
-  geom_bar(aes(y=percent, x=response.docs.type_of_material, fill=response.docs.type_of_material), stat = "identity") + coord_flip() +
-  labs(title = "New York Times News Articles with the term 'Wetlands'",
-       subtitle = "January 2019 - April 2022",
-       caption = paste0("NYT stories in search criteria,  N=", nrow(nyt_wetlands_dat)))
-```
 
+# Publications per day chart >=3 hits
 ```{r}
-# switch to pages
-nyt_wetlands_dat %>%
+nyt_wetland %>%
   mutate(pubDay=gsub("T.*","",response.docs.pub_date)) %>%
   group_by(pubDay) %>%
   summarise(count=n()) %>%
   filter(count >= 2) %>%
+  ggplot(aes(y = reorder(pubDay, count), x = count)) +
+  geom_bar(aes(), stat="identity") + 
+  labs(title = "Publications Per Day: January 2019 - April 2022",
+       subtitle = "term = 'Wetland'",
+       x = "Count",
+       y = "Date")
+```
+
+
+
+
+# Graph Type of News Articles 
+```{r bar_graph}
+# switch to pages
+nyt_wetland %>% 
+  group_by(response.docs.type_of_material) %>%
+  summarize(count=n()) %>%
+  mutate(percent = (count / sum(count))*100) %>%
   ggplot() +
-  geom_bar(aes(x=reorder(pubDay, count), y=count), stat="identity") + coord_flip()
+  geom_bar(aes(x = percent, 
+               y = response.docs.type_of_material, 
+               fill=response.docs.type_of_material), 
+           stat = "identity") + 
+  labs(title = "Articles Types: January 2019 - April 2022",
+       subtitle = "term = 'Wetland'",
+       caption = paste0("NYT stories in search criteria,  N=", nrow(nyt_wetland)))
 ```
 
+# Frequency Plots
+```{r tokenize_words}
+# the 21st column represents the article title
+headline <- names(nyt_wetland)[21]
+headline
 
-```{r}
-names(nyt_wetlands_dat)
+headline_tokenized <- nyt_wetland %>%
+  unnest_tokens(word, headline)
+
+# the 7th column represents lead paragraph
+lead_paragraph <- names(nyt_wetland)[7]
+lead_paragraph
+
+lead_tokenized <- nyt_wetland %>%
+  unnest_tokens(word, lead_paragraph)
 ```
 
-```{r frequency_table}
-#The 6th column, "response.doc.lead_paragraph", is the one we want here. 
-paragraph <- names(nyt_wetlands_dat)[6]  
-tokenized <- nyt_wetlands_dat %>%
-  unnest_tokens(word, paragraph)
-
-# lot's of fluff words that don't really help us tell meaning from the articles
-tokenized %>%
+## Raw view of the word frequency plots using the article headline and lead paragraph
+```{r raw_frequency_plots}
+# article title word frequency plot raw
+headline_freq <- headline_tokenized %>%
   count(word, sort = TRUE) %>%
-  filter(n > 10) %>% #illegible with all the words displayed
+  filter(n > 15) %>% #illegible with all the words displayed
   mutate(word = reorder(word, n)) %>%
   ggplot(aes(n, word)) +
   geom_col() +
-  labs(y = NULL)
+  labs(title = "Word Frequency",
+       subtitle = "Title 'raw'",
+       y = NULL)
+
+# lead paragraph word frequency plot raw
+lead_freq <- lead_tokenized %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 55) %>% #illegible with all the words displayed
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(title = "Word Frequency",
+       subtitle = "Lead Paragraph 'raw'",
+       y = NULL)
+
+headline_freq + lead_freq
 
 ```
 
-
-# Let's grab some stop_words to remove fluff
+## Let's grab some stop_words to remove fluff in the headline
 ```{r}
 data(stop_words)
 
-# removes all the stop_words from the columns in the tokenized words
-tokenized <- tokenized %>%
+# removes all the stop_words from the columns in the headline_tokenized words
+headline_tokenized <- headline_tokenized %>%
   anti_join(stop_words)
 
-tokenized %>%
+# removes all the stop_words from the columns in the lead_tokenized words
+lead_tokenized <- lead_tokenized %>%
+  anti_join(stop_words)
+
+
+headline_freq2 <- headline_tokenized %>%
+  count(word, sort = TRUE) %>%
+  filter(n > 5) %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word)) +
+  geom_col() +
+  labs(title = "Word Frequency",
+       subtitle = "Headline 'stop_words removed'",
+       y = NULL)
+
+lead_freq2 <- lead_tokenized %>%
   count(word, sort = TRUE) %>%
   filter(n > 15) %>%
   mutate(word = reorder(word, n)) %>%
   ggplot(aes(n, word)) +
   geom_col() +
-  labs(y = NULL)
+  labs(title = "Word Frequency",
+       subtitle = "Lead Paragraph 'stop_words removed'",
+       y = NULL)
+
+
+headline_freq2 + lead_freq2
+
 ```
 
-```{r cleaning}
-#inspect the list of tokens (words)
-tokenized$word
+These plots look better but not great. The word **'climate'** is likely tied to **'climate change'** and contractions are present in both, which isn't very helpful for inferring any meaning from frequency plots. Let's remove those filler words.
 
-#Remove "change" from word bank
-clean_tokens <- str_remove_all(tokenized$word, "change")
+```{r headline_cleaning}
+#inspect the list of tokens (words)
+# headline_tokenized$word
+
+#Remove "change", "here's" from word bank
+clean_tokens <- str_remove_all(headline_tokenized$word, "change")
+clean_tokens <- str_remove_all(clean_tokens, "here's")
+clean_tokens <- str_remove_all(clean_tokens, "it")
 
 # replace climate with climate change
+clean_tokens <- str_replace_all(clean_tokens,"world[a-z,A-Z]*","world") #stem tribe words
 clean_tokens <- str_replace_all(clean_tokens,"climate[a-z,A-Z]*","climate change") 
 
 #remove all numbers
-clean_tokens <- str_remove_all(clean_tokens, "[:digit:]") 
+clean_tokens <- str_remove_all(clean_tokens, "[:digit:]")
 
 # removes apostrophe s
 clean_tokens <- gsub("’s", '', clean_tokens)
 ```
 
-```{r}
-tokenized$clean <- clean_tokens
+Let's do the same for the lead paragraph
+```{r lead_paragraph_cleaning}
+#inspect the list of tokens (words)
+# lead_tokenized$word
 
-tokenized %>%
+#Remove "change", "here's" from word bank
+clean_tokens2 <- str_remove_all(lead_tokenized$word, "change")
+clean_tokens2 <- str_remove_all(clean_tokens2, "here's")
+clean_tokens2 <- str_remove_all(clean_tokens2, "$it$")
+
+# replace climate with climate change
+clean_tokens2 <- str_replace_all(clean_tokens2,"world[a-z,A-Z]*","world") #stem tribe words
+clean_tokens2 <- str_replace_all(clean_tokens2,"climate[a-z,A-Z]*","climate change") 
+
+#remove all numbers
+clean_tokens2 <- str_remove_all(clean_tokens2, "[:digit:]")
+
+# removes apostrophe s
+clean_tokens2 <- gsub("’s", '', clean_tokens2)
+
+```
+
+
+```{r update tokenized tables with cleaned words}
+# add cleaned words to stop_words
+headline_tokenized$clean <- clean_tokens
+lead_tokenized$clean <- clean_tokens2
+
+#remove the empty strings
+tib <-subset(headline_tokenized, clean!="")
+tib2 <- subset(lead_tokenized, clean!="")
+
+#reassign
+headline_tokenized <- tib
+lead_tokenized <- tib2
+```
+
+
+```{r plot final cleaned frequency plots}
+#plot the updated word frequency plot
+headline_freq3 <- headline_tokenized %>%
+  count(clean, sort = TRUE) %>%
+  filter(n > 5) %>% #illegible with all the words displayed
+  mutate(clean = reorder(clean, n)) %>%
+  ggplot(aes(n, clean)) +
+  geom_col() +
+  labs(title = "Word Frequency",
+       subtitle = "Headline 'Final Cleaning'",
+       y = NULL)
+
+
+lead_freq3 <- lead_tokenized %>%
   count(clean, sort = TRUE) %>%
   filter(n > 15) %>% #illegible with all the words displayed
   mutate(clean = reorder(clean, n)) %>%
   ggplot(aes(n, clean)) +
   geom_col() +
-  labs(y = NULL)
+  labs(title = "Word Frequency",
+       subtitle = "Lead Paragraph 'Final Cleaning'",
+       y = NULL)
 
-#remove the empty strings
-tib <-subset(tokenized, clean!="")
-
-#reassign
-tokenized <- tib
-
-#try again
-tokenized %>%
-  count(clean, sort = TRUE) %>%
-  filter(n > 10) %>% #illegible with all the words displayed
-  mutate(clean = reorder(clean, n)) %>%
-  ggplot(aes(n, clean)) +
-  geom_col() +
-  labs(y = NULL)
-
+headline_freq3 + lead_freq3
 ```
 
