@@ -1,12 +1,14 @@
 ---
-title: "02_week_nyt_api"
+title: "Week 2 Lab: Text Analysis in R"
 author: "Steven Cognac"
-date: "4/6/2022"
-output: html_document
+date: "4/12/2022"
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE)
 
 library(jsonlite) #convert results from API queries into R-friendly formats 
 library(tidyverse) 
@@ -86,7 +88,7 @@ nyt_wetland %>%
 
 
 # Graph Type of News Articles 
-```{r bar_graph}
+```{r bar_graph, eval=FALSE}
 # switch to pages
 nyt_wetland %>% 
   group_by(response.docs.type_of_material) %>%
@@ -129,7 +131,7 @@ headline_freq <- headline_tokenized %>%
   ggplot(aes(n, word)) +
   geom_col() +
   labs(title = "Word Frequency",
-       subtitle = "Title 'raw'",
+       subtitle = "Headlines 'raw'",
        y = NULL)
 
 # lead paragraph word frequency plot raw
@@ -146,6 +148,8 @@ lead_freq <- lead_tokenized %>%
 headline_freq + lead_freq
 
 ```
+In our raw Headline and Lead Paragraph frequency plots we see words like 'the', 'a', and other filler words as our top hits.
+
 
 ## Let's grab some stop_words to remove fluff in the headline
 ```{r}
@@ -226,6 +230,8 @@ clean_tokens2 <- str_remove_all(clean_tokens2, "[:digit:]")
 
 # removes apostrophe s
 clean_tokens2 <- gsub("’s", '', clean_tokens2)
+clean_tokens2 <- gsub(",", '', clean_tokens2)
+clean_tokens2 <- gsub("it", '', clean_tokens2)
 
 ```
 
@@ -270,4 +276,4 @@ lead_freq3 <- lead_tokenized %>%
 
 headline_freq3 + lead_freq3
 ```
-
+In these updated Headline frequency plot we have words like 'climate change' briefing', 'trump', and 'world' topping our lists. In our updated Lead Paragraph frequency plot we have words like 'york', 'world', 'climate change' and 'city' topping our list.

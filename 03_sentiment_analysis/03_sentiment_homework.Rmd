@@ -1,0 +1,115 @@
+---
+title: "03_sentiment_analysis_homework"
+author: "Steven Cognac"
+date: "4/13/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyr) #text analysis in R
+library(lubridate) #working with date data
+library(pdftools) #read in pdfs
+library(tidyverse)
+library(tidytext)
+library(here)
+library(LexisNexisTools) #Nexis Uni data wrangling
+library(sentimentr)
+library(readr)
+```
+
+
+
+# Import files
+```{r, message=FALSE}
+my_files <- list.files(pattern = ".docx",
+                       path = here(),
+                       full.names = TRUE,
+                       recursive = TRUE, 
+                       ignore.case = TRUE)
+
+# Object of class 'LNT output'
+dat <- lnt_read(my_files)
+```
+
+```{r}
+
+meta_df <- dat@meta
+articles_df <- dat@articles
+paragraphs_df <- dat@paragraphs
+
+dat2 <- data_frame(element_id = seq(1:length(meta_df$Headline)),
+                  Date = meta_df$Date, 
+                  Headline = meta_df$Headline)
+
+
+# May be of use for assignment: using the full text from the articles
+paragraphs_dat <- data_frame(element_id = paragraphs_df$Art_ID,
+                             Text  = paragraphs_df$Paragraph)
+
+dat3 <- inner_join(dat2, paragraphs_dat, by = "element_id")
+```
+
+## Need to clean data above before chunk below
+
+```{r}
+# can we create a similar graph to Figure 3A from Froelich et al.? 
+mytext <- get_sentences(dat3$Text)
+
+sent <- sentiment(mytext)
+
+sent_df <- inner_join(dat3, sent, by = "element_id")
+
+sentiment <- sentiment_by(sent_df$Text)
+
+sent_df %>%
+  arrange(sentiment)
+
+sent_df$polarity <- ifelse(sent_df$sentiment <0, -1, ifelse(sent_df$sentiment > 0, 1, 0))
+```
+
+
+
+```{r}
+# unnest to word-level tokens, remove stop words, and join sentiment words
+text_words2 <- dat3  %>%
+  unnest_tokens(output = word, input = Text, token = 'words')
+
+ # break text into individual words
+sent_words <- text_words2 %>%
+  
+  # returns only the rows without stop words
+  anti_join(stop_words, by = 'word') %>%
+  
+  # joins and retains only sentiment words
+  inner_join(get_sentiments("nrc"), by = 'word') %>% 
+  
+  # fitler out positive & negative
+  filter(!sentiment %in% c('positive', 'negative'))
+```
+
+
+```{r}
+sent_pct <- sent_words %>% 
+  group_by(Date, sentiment) %>% 
+  count(sentiment) %>%
+  ungroup() %>% 
+  group_by(Date) %>% 
+  mutate(n_max_day = sum(n),
+         percent = round((n/n_max_day)*100, 2))
+
+```
+
+```{r}
+ggplot(data = sent_pct) +
+  geom_line(aes(x = Date, y = percent, fill = sentiment, color = sentiment)) +
+  labs(title = "Percent of Emotion from",
+       subtitle = "term = 'storm surge protection'",
+       caption = "lexicon 'emotion' from Nexis-Uni") +
+  theme_minimal()
+```
+
+
