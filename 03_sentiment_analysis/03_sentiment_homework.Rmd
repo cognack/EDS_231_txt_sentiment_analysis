@@ -1,13 +1,13 @@
 ---
-title: "03_sentiment_analysis_homework"
+title: "Homework 3, Sentiment Analysis"
 author: "Steven Cognac"
-date: "4/13/2022"
+date: "4/19/2022"
 output:
   pdf_document: default
   html_document: default
 ---
 
-```{r setup, include=FALSE, warning=FALSE}
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 library(tidyr) #text analysis in R
@@ -23,23 +23,76 @@ library(readr)
 ```
 
 
+# Part A. 
+Re-create plot from [Fig. 1](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5207524/) in the Froelich et al. 2017 paper titled "Public Perceptions of Aquaculture: Evaluating Spatiotemporal Patterns of Sentiment around the World".
 
-# Import files
+## Read in IPCC File
+```{r message=FALSE}
+# read in the .docx file
+ipcc_file <- here("Nexis_IPCC_Results.docx")
+```
+```{r include=FALSE}
+ipcc <- lnt_read(ipcc_file) #Object of class 'LNT output'
+```
+
+## Create datafrome from IPCC data
+
+```{r create_ipcc_df}
+ipcc_meta <- ipcc@meta
+ipcc_df <- data_frame(
+  element_id = seq(1:length(ipcc_meta$Headline)), 
+  Date = ipcc_meta$Date, 
+  Headline = ipcc_meta$Headline)
+```
+
+```{r get_headline_sentiment}
+bing_sent <- get_sentiments('bing')
+
+ipcc_sent <- ipcc_df$Headline %>% 
+  get_sentences() %>% 
+  sentiment() %>% 
+  inner_join(ipcc_df, by = "element_id") %>%  
+  mutate(
+    sent_category = case_when(
+      sentiment < 0 ~ "negative",
+      sentiment > 0 ~ "positive",
+      T ~ "neutral")) %>% 
+  count(sent_category, Date)
+```
+
+```{r ipcc_plot}
+ggplot(data = ipcc_sent, aes(x = Date, y = n, color = sent_category)) +
+  geom_line(size = 2, alpha = 0.8) +
+  labs(y = "Developed Media Sentiment\n(no. headlines)",
+       x = NULL) +
+  scale_color_manual(values = c(
+    "positive" = "blue", 
+    "nuetral" = "grey", 
+    "negative" = "red")) +
+  theme_minimal()
+```
+
+
+# Part B. Nexis Uni Database Search
+
+## Import files
  - keyword search 'inaturalist'
- - (iNaturalist)[https://www.inaturalist.org/] is a nature app that helps you identify the plants and animals. 
+ - [iNaturalist](https://www.inaturalist.org/) is a nature app that helps a user identify plants and animals through the camera on their smartphone. 
  
-```{r, message=FALSE}
+```{r}
 my_files <- list.files(pattern = ".docx",
                        path = here(),
                        full.names = TRUE,
                        recursive = TRUE, 
                        ignore.case = TRUE)
-
+```
+```{r include=FALSE}
 # Object of class 'LNT output'
 dat <- lnt_read(my_files)
 ```
 
 ## Let's look at some of the data of our articles.
+
 ```{r}
 # isolating matedata, articles, and paragraphs
 meta_df <- dat@meta
@@ -57,135 +110,69 @@ paragraphs_dat <- data_frame(element_id = paragraphs_df$Art_ID,
 
 # join dat2 with paragraphs_df
 dat3 <- inner_join(dat2, paragraphs_dat, by = "element_id")
-dat3
 ```
 
 # Cleaning the Data
+
 Now lets clean up dat3 in the code chunks below. First we need to unnest the `text` column to the word level so we can extract the individual words. Next we'll remove unwanted character patterns. 
 
 
-We want to remove unwanted data in the `Text` column as these are not actual paragraphs. Patterns we'll remove include:
+We want to remove unwanted data in the `Text` column as these are not actual paragraphs. Patterns we'll search for and remove include:
 
  1. Web address pattern "[ 1]: http..."
  2. Paragraphs less than 40 characters
 
 ```{r clean_data}
-# remove paragraphs that contain website links,  or are shorter than 21 characters
+# remove paragraphs that contain website links and are shorter than 41 characters
 dat4 <- dat3 %>% 
   mutate(link = str_detect(dat3$Text, "1]: http://", negate = FALSE),
          txt_short = nchar(dat3$Text) < 40) %>%
-  filter(link == FALSE & txt_short == FALSE)
+  filter(link == FALSE & txt_short == FALSE) %>% 
+  select(!c(link, txt_short))
 
+# Let'ts check the number of rows removed
+rows_all = nrow(dat3)
+rows_new = nrow(dat4)
+rows_remove = rows_all - rows_new
 ```
+
+The original dataframe included `r rows_all` paragraphs of data. Filtering out paragraphs allowed for the removal of `r rows_remove` rows of data for a new paragraph total of `r rows_new`.
+
+
+# Tokenizing
+
+We need to unnest the filtered `Text' column to the word level so we can label the individual sentiment words. Let's also remove stop words as standard text cleaning procedure. Note: Not every English word is in the lexicons because many English words are pretty neutral.
+
 ```{r}
-nrow(dat4)
+emotion_words <- get_sentiments("nrc") %>% 
+  filter(!sentiment %in% c("negative", "positive"))
 
-
-df_length = nrow(dat3) - nrow(dat4)
-df_length
-```
-
-
-
-
-
-
-```{r tokenizing}
+# Grabbing sentiment for paragraphs using NRC Emotions
 # unnest to word-level tokens remove stop words, and join sentiment words
-text_words <- dat3  %>%
-  unnest_tokens(output = word, input = Text, token = 'words')
-
-# inspect the list of tokens (words)
-# text_words$word
-```
-
-
-
-
-```{r text_cleaning}
-clean_tokens <- str_remove_all(text_words$word, "_[a-z,A-Z]*")
-
-clean_tokens <- str_remove_all(clean_tokens, "[:digit:]")
-clean_tokens <- str_remove_all(clean_tokens, "www.[a-z,A-Z]*")
-
-clean_tokens <- str_remove_all(clean_tokens, "(df3$z1))>=3)")
-```
-
-
-
-
-
-
-# We need to unnest the text to the word level so we can label the individual sentiment words. Let's also remove stop words as standard text cleaning procedure. Note: Not every English word is in the lexicons because many English words are pretty neutral.
-
-```{r}
-
-
-# break text into individual words (tokenized)
-sent_words <- text_words %>%
-  
-  # returns only the rows without stop words
-  anti_join(stop_words, by = 'word') %>%
-  
-  # joins and retains only sentiment words
-  inner_join(get_sentiments("nrc"), by = 'word') %>% 
-  
-  # fitler out positive & negative
-  filter(!sentiment %in% c('positive', 'negative'))
-```
-
-
-
-```{r}
-sent_pct <- sent_words %>% 
+emotions <- dat4 %>%
+  unnest_tokens(word, Text) %>% 
+  inner_join(emotion_words) %>% 
+  na.omit() %>% 
   group_by(Date, sentiment) %>% 
-  count(sentiment) %>%
+  
+  # count number of sentiment words per day
+  count() %>%
   ungroup() %>% 
-  group_by(Date) %>% 
+  group_by(Date) %>%
+  
+  # add total word 
   mutate(n_max_day = sum(n),
          percent = round((n/n_max_day)*100, 2))
-
 ```
 
 
-```{r}
-ggplot(data = sent_pct) +
-  geom_line(aes(x = Date, y = percent, color = sentiment)) +
-  labs(title = "Percent of Emotion from",
-       subtitle = "term = 'inaturalist'",
+```{r plot_iNaturalist_results}
+ggplot(data = emotions, aes(x = Date, y = percent, color = sentiment)) +
+  geom_smooth(se = FALSE) +
+#  geom_point() +
+  labs(title = "Proportion of sentiment in 300 articles (2011-2022) \n on the search term 'iNaturalist'",
+       x = "Date",
+       y = "Frequency (%)",
        caption = "lexicon 'emotion' from Nexis-Uni") +
   theme_minimal()
 ```
-
-
-
-
-
-
-
-
-
-data above before chunk below
-```{r}
-# grab text sentences from each paragraph
-mytext <- get_sentences(dat3$Text)
-
-sent <- sentiment(mytext)
-
-sent_df <- inner_join(dat3, sent, by = "element_id")
-
-sentiment <- sentiment_by(sent_df$Text)
-
-sent_df %>%
-  arrange(sentiment)
-
-sent_df$polarity <- ifelse(test = sent_df$sentiment <0, -1, ifelse(sent_df$sentiment > 0, 1, 0))
-```
-
-
-```{r}
-
-
-
-```
-
