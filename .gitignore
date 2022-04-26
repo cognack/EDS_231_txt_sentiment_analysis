@@ -41,3 +41,6 @@ vignettes/*.pdf
 
 # nyt_api_key
 02_NYT_assignment/nyt_api_key.txt
+
+# twitter data
+04_sentiment_analysis2/twitter
