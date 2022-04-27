@@ -44,3 +44,11 @@ vignettes/*.pdf
 
 # twitter data
 04_sentiment_analysis2/twitter
+
+# EPA pdfs
+05_EPA_txt_analysis/EPA_EJ_2015.pdf
+05_EPA_txt_analysis/EPA_EJ_2016.pdf
+05_EPA_txt_analysis/EPA_EJ_2017.pdf
+05_EPA_txt_analysis/EPA_EJ_2018.pdf
+05_EPA_txt_analysis/EPA_EJ_2019.pdf
+05_EPA_txt_analysis/EPA_EJ_2020.pdf
