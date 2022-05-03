@@ -8,7 +8,8 @@ output:
 ---
 
 ```{r setup, include=FALSE, warning=FALSE, message=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+options(scipen=5)
 ```
 
 ```{r packages, message=FALSE}
@@ -193,7 +194,7 @@ energy_cors <- word_cors %>%
   mutate(n = 1:n())
 
 energy_cors  %>%
-  filter(n <= 40) %>%
+  filter(n <= 20) %>%
   graph_from_data_frame() %>%
   ggraph(layout = "fr") +
   geom_edge_link(aes(edge_alpha = correlation, edge_width = correlation), edge_colour = "firebrick3") +
@@ -203,7 +204,6 @@ energy_cors  %>%
   theme_void()
 ```
 Not surprisingly, we see "renewable energy" and "solar energy" as our most highly correlated word pairs. One surprising correlation is "worship" and energy. 
-
 
 # Part 3.  Write a function that allows you to conduct a keyness analysis to compare two individual EPA reports (hint: that means target and reference need to both be individual reports). Run the function on 3 pairs of reports, generating 3 keyness plots.
 
@@ -226,10 +226,11 @@ keyness_fn()
 
 # Part 4.  Select a word or multi-word term of interest and identify words related to it using windowing and keyness comparison. To do this you will create to objects: one containing all words occurring within a 10-word window of your term of interest, and the second object containing all other words. Then run a keyness comparison on these objects. Which one is the target, and which the reference? [Hint](https://tutorials.quanteda.io/advanced-operations/target-word-collocations/)
 
+Term of interest = "regulatory"
 ```{r}
-term <- c("water")
+term <- c("regulatory")
 
-# words within a 10-word window of "water"
+# words within a 10-word window of "regulatory"
 toks_inside <- tokens_keep(tokens, pattern = term, window = 10) %>% 
   tokens_remove(pattern = term) %>% # remove the keywords
   tokens_tolower() %>% 
@@ -237,7 +238,7 @@ toks_inside <- tokens_keep(tokens, pattern = term, window = 10) %>%
 
 dfm_inside <- dfm(toks_inside)
 
-# words outside a 10-word window of "water"
+# words outside a 10-word window of "regulatory"
 toks_outside <- tokens_remove(tokens, pattern = term, window = 10) %>% 
   tokens_tolower() %>% 
   tokens_remove(pattern = c(stop_vec))
@@ -250,8 +251,8 @@ dfm_inside_outside <- rbind(dfm_inside, dfm_outside)
 # compute associations with keywords
 keyness2 <- textstat_keyness(dfm_inside_outside, target = seq_along(ndoc(dfm_inside)))
 
-gt_keyness2 <- gt(keyness2[1:20])
+gt_keyness2 <- gt(keyness2[1:10])
 gt_keyness2 %>% 
-  tab_header(title = "Top 20 Word Associations with 'water'")
+  tab_header(title = "Table 1. Top 10 Word Associations with 'regulatory'")
 ```
-
+Table 1 includes the top 20 words that occur within a 10-word window of our target word "regulatory." The `n_target` indicates the number of occurrences where the 'feature' word occurs within the 10-word window. The `n_reference` indicates the number of occurrences where the 'feature' word occurs outsdie the 10-word window.
