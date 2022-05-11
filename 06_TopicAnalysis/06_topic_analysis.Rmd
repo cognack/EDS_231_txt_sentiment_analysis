@@ -18,12 +18,13 @@ library(tidyverse)
 library(tidytext)
 library(reshape2)
 ```
+
 ## Load the data
 
 ```{r}
 ##Topic 6 .Rmd here:https://raw.githubusercontent.com/MaRo406/EDS_231-text-sentiment/main/topic_6.Rmd
 #grab data here: 
-comments_df<-read_csv("https://raw.githubusercontent.com/MaRo406/EDS_231-text-sentiment/main/dat/comments_df.csv")
+comments_df <- read_csv("https://raw.githubusercontent.com/MaRo406/EDS_231-text-sentiment/main/dat/comments_df.csv")
 
 #comments_df <- read_csv(here("dat", "comments_df.csv")) #if reading from local
 ```
@@ -54,7 +55,7 @@ dfm <- dfm_trim(dfm, min_docfreq = 2) #remove terms only appearing in one doc (m
 
 print(head(dfm))
 
-#remove rows (docs) with all zeros
+# remove rows (docs) with all zeros
 sel_idx <- slam::row_sums(dfm) > 0 
 dfm <- dfm[sel_idx, ]
 #comments_df <- dfm[sel_idx, ]
@@ -77,8 +78,6 @@ attributes(tmResult)
 #nTerms(dfm_comm)   
 beta <- tmResult$terms   # get beta from results
 dim(beta)                # K distributions over nTerms(DTM) terms# lengthOfVocab
-
-
 ```
 ```{r}
 # words with the top 10 likelihood / probability of frequency in each topic
@@ -208,10 +207,4 @@ serVis(json)
 continue on with the analysis we started:
 Run three more models and select the overall best value for k (the number of topics) - include some justification for your selection: theory, FindTopicsNumber() optimization metrics, interpretability, LDAvis
 
-## OR
-
-use the data you plan to use for your final project:
-Prepare the data so that it can be analyzed in the topicmodels package
-
-Run three more models and select the overall best value for k (the number of topics) - include some justification for your selection: theory, FindTopicsNumber() optimization metrics, interpretability, LDAvis
 
