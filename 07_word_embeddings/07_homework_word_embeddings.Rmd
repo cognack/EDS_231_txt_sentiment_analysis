@@ -1,0 +1,160 @@
+---
+title: 'Topic 7: Word Embeddings'
+author: "Steven Cognac"
+date: '2022-05-11'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r packages, include = FALSE}
+library(here)
+library(tidytext)
+library(tidyverse)
+library(widyr)
+library(irlba) #singluar value decomposition
+library(broom) # creating search_synonym function
+library(textdata)
+library(ggplot2)
+library(dplyr)
+library(here)
+library(readr)
+```
+
+# What are word Embeddings?
+
+Word embeddings are a type of word representation that allows words with similar meaning to have a similar representation. In Natural Language Processing for text analysis, they typically come in the form of real-valued vectors that encode the meaning of words such that the words closer together are expected to be similar in meaning.
+
+For this exercise, we'll use pre-trained word vector from the [GloVe: Global Vectors for Word Representation](https://nlp.stanford.edu/projects/glove/) project. Specifically, we'll use the Wiki2014 + Gigword5 [300d vector file](https://nlp.stanford.edu/data/glove.6B.zip).
+
+## Import data
+I downloaded the data and saved it to a local folder
+
+```{r, results='hide'}
+glov_df <- read_table(here('07_word_embeddings/data/glove.6B.300d.txt'), 
+                       col_names = FALSE) %>% 
+  column_to_rownames(., var = "X1")
+```
+
+## Create similarity function
+
+```{r syn-function}
+search_synonyms <- function(glov_df, selected_vector) {
+
+  dat <- glov_df %*% selected_vector
+  
+  similarities <- dat %>%
+        tibble(token = rownames(dat), 
+               similarity = dat[,1])
+  
+  similarities %>%
+       arrange(-similarity) %>%
+        select(c(2,3))
+}
+```
+
+## Word Synonyms
+
+First we'll convert the dataframe to a matrix
+```{r}
+glov_matrix <- data.matrix(glov_df)
+```
+
+You can search word synonyms with the `search_synonyms()` function. We can then plot those synonyms.
+
+```{r find-synonyms}
+king <- search_synonyms(glov_matrix, glov_matrix["king",])
+man <- search_synonyms(glov_matrix, glov_matrix["man",])
+```
+
+
+```{r plot-synonyms}
+king_man_plot <- king %>%
+  mutate(selected = "king") %>%
+  bind_rows(man %>%
+              mutate(selected = "man")) %>%
+  group_by(selected) %>%
+  top_n(15, similarity) %>%
+  ungroup %>%
+  mutate(token = reorder(token, similarity)) %>%
+  
+  # plot setup
+  ggplot(aes(token, similarity, fill = selected)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~selected, scales = "free") +
+  coord_flip() +
+  theme(strip.text=element_text(hjust=0, size=12)) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(x = NULL, 
+       title = "What word vectors are most similar to king or man?",
+       subtitle = "Top 15 words")
+
+king_man_plot
+```
+
+In our word embedding plots, we see `king` is highly similar to other terms of royalty. These are words that have a high similarity to and in some cases, be swapped for that word. The word `man` on the other hand is more similar to other words that relate to people.
+
+## Word Math
+
+You can use simple arithmetic to search for synonyms of multiple words "king + man" or synonyms of one word while excluding the other "king - man".
+
+Here we'll try a couple examples
+```{r word-math}
+king_no_man <- glov_matrix["king",] - glov_matrix["man",] 
+search_synonyms(glov_matrix, king_no_man)
+
+# love and sad
+love <- search_synonyms(glov_matrix, glov_matrix["love",])
+sad <- search_synonyms(glov_matrix, glov_matrix["sad",])
+
+
+love_no_sad <- glov_matrix["love",] - glov_matrix["sad",]
+search_synonyms(glov_matrix, love_no_sad)
+
+love_sad <- glov_matrix["love",] + glov_matrix["sad",]
+search_synonyms(glov_matrix, love_sad)
+
+
+# alcohol and drug
+alcohol <- search_synonyms(glov_matrix, glov_matrix["alcohol",])
+drug <- search_synonyms(glov_matrix, glov_matrix["drug",])
+
+alcohol_no_drug <- glov_matrix["alcohol",] - glov_matrix["drug",]
+alcohol_no_drug <- search_synonyms(glov_matrix, alcohol_no_drug)
+
+alcohol_drug <- glov_matrix["alcohol",] + glov_matrix["drug",]
+alcohol_drug <- search_synonyms(glov_matrix, alcohol_drug)
+```
+
+```{r}
+alcohol_drug_plot <- alcohol_no_drug %>%
+  mutate(selected = "04_alcohol-drug") %>%
+  bind_rows(alcohol %>% 
+              mutate(selected = "01_alcohol"),
+            drug %>% 
+              mutate(selected = "03_drug"),
+            alcohol_drug %>%
+              mutate(selected = "02_alcohol+drug")) %>%
+  group_by(selected) %>%
+  top_n(15, similarity) %>%
+  ungroup %>%
+  mutate(token = reorder(token, similarity)) %>%
+  
+  # plot setup
+  ggplot(aes(token, similarity, fill = selected)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~selected, scales = "free") +
+  coord_flip() +
+  theme(strip.text=element_text(hjust=0, size=12)) +
+  scale_y_continuous(expand = c(0,0)) +
+  labs(x = NULL, 
+       title = "Word vectors for alcohol & drug combinations",
+       subtitle = "Top 15 words")
+
+alcohol_drug_plot
+```

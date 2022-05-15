@@ -52,3 +52,6 @@ vignettes/*.pdf
 05_EPA_txt_analysis/EPA_EJ_2018.pdf
 05_EPA_txt_analysis/EPA_EJ_2019.pdf
 05_EPA_txt_analysis/EPA_EJ_2020.pdf
+
+# Topic 7 data
+07_word_embeddings/data
